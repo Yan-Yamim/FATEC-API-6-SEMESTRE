@@ -8,7 +8,10 @@ dependencies = [
     "alembic>=1.18.4",
     "fastapi[standard]>=0.135.1",
     "psycopg2-binary>=2.9.11",
+    "pwdlib[argon2]>=0.3.0",
     "pydantic-settings>=2.13.1",
+    "pyjwt>=2.11.0",
+    "python-multipart>=0.0.22",
     "sqlalchemy>=2.0.48",
 ]
 
@@ -40,5 +43,4 @@ addopts = '-p no:warnings'
 lint = 'ruff check'
 format = 'ruff format'
 run = 'uv run fastapi dev app.py'
-test = 'pytest -s -x'
-coverage = 'pytest --cov=. -vv'
+test = 'pytest --cov=. -vv'
