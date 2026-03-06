@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+COPY backend/pyproject.toml backend/uv.lock ./
+
+RUN uv sync --frozen --no-dev --no-cache
+
+COPY backend/ ./backend/
+
+EXPOSE 8000
+
+ENV PYTHONPATH=/app:/app/backend
+
+CMD ["uv", "run", "uvicorn", "--host", "0.0.0.0", "backend.app:app"]
