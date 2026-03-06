@@ -7,20 +7,26 @@ requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.18.4",
     "fastapi[standard]>=0.135.1",
+    "motor>=3.7.1",
     "psycopg2-binary>=2.9.11",
+    "psycopg[binary]>=3.3.3",
     "pwdlib[argon2]>=0.3.0",
     "pydantic-settings>=2.13.1",
     "pyjwt>=2.11.0",
+    "pymongo>=4.16.0",
     "python-multipart>=0.0.22",
     "sqlalchemy>=2.0.48",
 ]
 
 [dependency-groups]
 dev = [
+    "factory-boy>=3.3.3",
+    "freezegun>=1.5.5",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.15.4",
     "taskipy>=1.14.1",
+    "testcontainers>=4.14.1",
 ]
 
 [tool.ruff]
