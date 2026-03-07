@@ -1,0 +1,31 @@
+name: pipeline/CI
+on: ['pull_request']
+
+jobs:
+  test:
+    runs_on: ubuntu-latest
+
+    steps:
+      - name: Copy archives from repository
+        uses: actions/checkout@v4
+
+      - name: Install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14' 
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Execute  linter
+        run: uv run task lint
+
+      - name: Execute tests
+        run: uv run task test
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      ALGORITHM: ${{ secrets.ALGORITHM }}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
