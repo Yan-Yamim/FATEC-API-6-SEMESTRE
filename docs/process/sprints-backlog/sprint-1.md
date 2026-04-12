@@ -2,9 +2,8 @@
 
 | Rank | Prioridade | User Story | Requisitos Relacionados | Estimativa (Story Points) | Sprint |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Spike | - | Como um sistema de ingestão de dados geoespaciais,
-Eu quero processar arquivos .gdb.zip de forma assíncrona e eficiente,
-Para que eu possa disponibilizar dados tratados e georreferenciados no banco de dados para análise e visualização. | - | - | 1 |
+| Spike | - | Como um sistema de ingestão de dados geoespaciais, Eu quero processar arquivos .gdb.zip de forma assíncrona e eficiente,
+Para que eu possa disponibilizar dados tratados e georreferenciados no banco de dados para análise e visualização. | - | 1 |
 | 1 |  Alta | Como um consultor comercial/técnico da Tecsys, eu quero visualizar uma tabela de classificação calculando o Índice de Criticidade (desvio percentual de DEC e FEC com base nos limites da ANEEL) de cada conjunto elétrico, para que eu possa identificar e priorizar rapidamente quais regiões possuem a pior eficiência estrutural. | [`RF1-DATA-INGEST`](../requisitos.md#rf1-data-ingest---ingestão-de-dados-regulatórios), [`RF2-ANALYTICS-CRIT`](../requisitos.md#rf2-analytics-crit---cálculo-de-criticidade-e-perdas) | 18 | 1 | 
 | 2 |  Alta | Como um membro do time comercial/técnico, eu quero visualizar um gráfico de barras ordenado pelos conjuntos elétricos com maior índice SAM, para que eu saiba rapidamente quais regiões têm prioridade máxima de implantação de sensores. | [`RF2-ANALYTICS-CRIT`](../requisitos.md#rf2-analytics-crit---cálculo-de-criticidade-e-perdas) | 10 | 1 |  
 | 3 |  Alta | Como um membro do time comercial/técnico, eu quero visualizar um gráfico de barras empilhadas que compare o volume absoluto (em MWh) das Perdas Técnicas (PT) e Não Técnicas (PNT) de cada conjunto elétrico, para evidenciar a magnitude das falhas estruturais da rede.| [`RF2-ANALYTICS-CRIT`](../requisitos.md#rf2-analytics-crit---cálculo-de-criticidade-e-perdas) | 10 | 1 |
