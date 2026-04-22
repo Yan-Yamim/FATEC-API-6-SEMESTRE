@@ -18,23 +18,19 @@ conf = ConnectionConfig(
     VALIDATE_CERTS = True
 )
 
-async def send_email(user: User, file_path: str):
+async def send_email(user: User):
     """
     Envia o e-mail para o endereço do usuário (user.email).
     :param user: Objeto que contém o atributo 'email'
     :param file_path: Caminho do arquivo (PDF) já existente para anexo
     """
     try:
-        if not os.path.exists(file_path):
-            print(f"Erro: O arquivo {file_path} não foi encontrado.")
-            return
 
         message = MessageSchema(
             subject="Relatório automático",
             recipients=[user.email], 
             body="Olá, segue em anexo o relatório gerado.",
             subtype=MessageType.plain,
-            attachments=[file_path]
         )
 
         fm = FastMail(conf)
@@ -51,12 +47,7 @@ if __name__ == "__main__":
 
     test_user = MockUser(email="yan_teste@exemplo.com")
     
-    test_path = "teste_anexo.txt"
-    with open(test_path, "w") as f:
-        f.write("Conteudo de teste para o anexo do Mailtrap.")
-    
     try:
-        asyncio.run(send_email(user=test_user, file_path=test_path))
+        asyncio.run(send_email(user=test_user))
     finally:
-        if os.path.exists(test_path):
-            os.remove(test_path)
+        pass
