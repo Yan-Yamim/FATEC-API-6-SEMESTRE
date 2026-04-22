@@ -38,11 +38,11 @@ async def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dic
             cod_id = record.get("COD_ID")
             nome = record.get("NOME")
             
-            if cod_id is not None and nome is not None:
+            if cod_id is not None:
                 cod_id_str = str(cod_id).strip()
-                nome_str = str(nome).strip()
+                nome_str = str(nome).strip() if nome is not None else ""
                 
-                if cod_id_str not in mapping_cod_id_to_nome:
+                if nome_str != "" and cod_id_str not in mapping_cod_id_to_nome:
                     mapping_cod_id_to_nome[cod_id_str] = nome_str
     else:
         ctmt_cursor = db.circuitos_mt.find(
@@ -54,11 +54,11 @@ async def calculo_tam(db, job_id: str) -> Tuple[List[dict], List[dict], List[dic
             cod_id = ctmt.get("COD_ID")
             nome = ctmt.get("NOME")
             
-            if cod_id is not None and nome is not None:
+            if cod_id is not None:
                 cod_id_str = str(cod_id).strip()
-                nome_str = str(nome).strip()
+                nome_str = str(nome).strip() if nome is not None else ""
                 
-                if cod_id_str not in mapping_cod_id_to_nome:
+                if nome_str != "" and cod_id_str not in mapping_cod_id_to_nome:
                     mapping_cod_id_to_nome[cod_id_str] = nome_str
     
     sample_items = list(mapping_cod_id_to_nome.items())[:5]

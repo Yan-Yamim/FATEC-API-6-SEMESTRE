@@ -14,7 +14,7 @@ import os
 from backend.database import get_session
 from backend.security import get_password_hash
 from backend.routes.tam import get_db
-from ..core.models import User, table_registry
+from core.models import User, table_registry
 
 
 class UserFactory(factory.Factory):

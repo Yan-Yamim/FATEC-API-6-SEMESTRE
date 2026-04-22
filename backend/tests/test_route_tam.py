@@ -13,13 +13,14 @@ async def test_get_tam_nomes_corretos(mongo_db, setup_test_data, api_response):
     colecao = mongo_db[COLECAO_ALVO]
     amostra = await colecao.find_one({"job_id": setup_test_data})
     assert amostra is not None
-    ctmt_alvo = amostra["CTMT"]
+    ctmt_esperado = amostra["CTMT"]
     
     dados_api = api_response.json()["data"]["trechos"]
-    item_api = next((t for t in dados_api if t["CTMT"] == ctmt_alvo), None)
+    item_api = next((t for t in dados_api if t["CTMT"] == ctmt_esperado), None)
     
     assert item_api is not None
     assert "NOME" in item_api
+    assert item_api["NOME"] == ctmt_esperado, f"Esperava fallback para {ctmt_esperado}, mas veio {item_api['NOME']}"
 
 @pytest.mark.asyncio
 async def test_get_tam_404_job_inexistente(client):

@@ -11,9 +11,6 @@ app.include_router(auth.router)
 app.include_router(etl.router, prefix='/etl')
 app.include_router(tam.router)
 
-app.include_router(users.router)
-app.include_router(auth.router)
-
 
 @app.get('/', status_code=HTTPStatus.OK, response_model=Message)
 def read_root():
