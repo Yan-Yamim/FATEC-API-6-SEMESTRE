@@ -35,6 +35,7 @@ async def send_email(user: User):
             recipients=[user.email],
             body='Olá, seu relatório foi gerado com sucesso no sistema.',
             subtype=MessageType.plain,
+            attachments=[file_path]
         )
 
         fm = FastMail(conf)
