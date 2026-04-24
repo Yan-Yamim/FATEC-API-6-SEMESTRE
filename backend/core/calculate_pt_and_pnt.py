@@ -77,8 +77,7 @@ def calculate_pt_pnt(job_id: str) -> list[dict]:
     }
     logger.info('[pt_pnt] CONJ carregado. conjuntos=%d', len(name_by_conj))
 
-
-    ctmt_to_conj: dict[str, str] = {} 
+    ctmt_to_conjs: dict[str, set[str]] = defaultdict(set)
     cursor = db['segmentos_mt_tabular'].find(
         {'job_id': job_id},
         {'CTMT': 1, 'CONJ': 1, '_id': 0},
@@ -86,23 +85,26 @@ def calculate_pt_pnt(job_id: str) -> list[dict]:
     for seg in cursor:
         ctmt_cod = seg.get('CTMT')
         conj_cod = seg.get('CONJ')
-        if ctmt_cod and conj_cod and ctmt_cod not in ctmt_to_conj:
-            ctmt_to_conj[ctmt_cod] = conj_cod
+        if ctmt_cod and conj_cod:
+            ctmt_to_conjs[ctmt_cod].add(conj_cod)
 
-    logger.info('[pt_pnt] SSDMT carregado. pares_ctmt_conj=%d', len(ctmt_to_conj))
+    logger.info('[pt_pnt] SSDMT carregado. pares_ctmt_conj=%d', len(ctmt_to_conjs))
 
     accumulated: dict[str, dict[str, float]] = defaultdict(
         lambda: {'pt': 0.0, 'pnt': 0.0, 'ene': 0.0}
     )
 
-    for ctmt_cod, conj_cod in ctmt_to_conj.items():
+    for ctmt_cod, conjs in ctmt_to_conjs.items():
         record = ctmt_by_cod.get(ctmt_cod)
         if not record:
             continue
-
-        accumulated[conj_cod]['pt'] += _sum_columns(record, PT_COLUMNS)
-        accumulated[conj_cod]['pnt'] += _sum_columns(record, PNT_COLUMNS)
-        accumulated[conj_cod]['ene'] += _sum_columns(record, ENE_COLUMNS)
+        pt = _sum_columns(record, PT_COLUMNS)
+        pnt = _sum_columns(record, PNT_COLUMNS)
+        ene = _sum_columns(record, ENE_COLUMNS)
+        for conj_cod in conjs:
+            accumulated[conj_cod]['pt'] += pt
+            accumulated[conj_cod]['pnt'] += pnt
+            accumulated[conj_cod]['ene'] += ene
 
     results = []
     for conj_cod, vals in accumulated.items():
