@@ -12,9 +12,10 @@ from backend.app import app
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from backend.database import get_session
+from backend.core import models as _models  # noqa: F401
 from backend.security import get_password_hash
 from backend.routes.tam import get_db
-from core.models import User, table_registry
+from backend.core.models import User, table_registry
 
 
 class UserFactory(factory.Factory):
