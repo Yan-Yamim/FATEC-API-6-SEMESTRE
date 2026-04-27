@@ -1,6 +1,7 @@
-import pytest
 from unittest.mock import patch, AsyncMock
+import pytest
 from backend.email.envio_email import send_email
+from fastapi import HTTPException
 
 class MockUser:
     def __init__(self, email):
@@ -35,7 +36,8 @@ async def test_send_email_error_log(capsys):
         instance = MockFastMail.return_value
         instance.send_message = AsyncMock(side_effect=Exception("Falha na conexão"))
 
-        await send_email(user)
+        with pytest.raises(HTTPException) as exc_info:
+            await send_email(user)
 
-        captured = capsys.readouterr()
-        assert "Ocorreu um erro ao enviar o e-mail" in captured.out
+        assert exc_info.value.status_code == 500
+        assert "Falha na conexão" in exc_info.value.detail

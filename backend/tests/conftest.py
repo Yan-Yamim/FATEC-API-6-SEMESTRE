@@ -143,13 +143,13 @@ async def api_response(client, setup_test_data):
     return response
 
 @pytest.hookimpl(tryfirst=True)
-def pytest_sessionstart():
+def pytest_sessionstart(session):
     """
     Executa antes da coleta dos testes. 
     Define variáveis de ambiente mínimas para evitar erros de validação do Pydantic.
     """
-    os.environ["MAIL_USERNAME"] = "test_user"
-    os.environ["MAIL_PASSWORD"] = "test_password"
-    os.environ["MAIL_SERVER"] = "smtp.test.com"
-    os.environ["MAIL_PORT"] = "587"
-    os.environ["MAIL_FROM"] = "admin@test.com"  
+    os.environ.setdefault("MAIL_USERNAME", "test_user")
+    os.environ.setdefault("MAIL_PASSWORD", "test_password")
+    os.environ.setdefault("MAIL_SERVER", "smtp.test.com")
+    os.environ.setdefault("MAIL_PORT", "587")
+    os.environ.setdefault("MAIL_FROM", "admin@test.com")

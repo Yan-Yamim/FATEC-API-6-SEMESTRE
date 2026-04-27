@@ -1,35 +1,37 @@
-import os
 import asyncio
-from dotenv import load_dotenv
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+from fastapi import HTTPException
 from core.models import User
+from settings import Settings
 
-load_dotenv()
+settings = Settings()
 
-conf = ConnectionConfig(
-    MAIL_USERNAME = os.getenv("MAIL_USERNAME"),
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD"),
-    MAIL_FROM = os.getenv("MAIL_FROM"),
-    MAIL_PORT = int(os.getenv("MAIL_PORT", 587)),
-    MAIL_SERVER = os.getenv("MAIL_SERVER"),
-    MAIL_STARTTLS = True,
-    MAIL_SSL_TLS = False,
-    USE_CREDENTIALS = True,
-    VALIDATE_CERTS = True
-)
+def get_mail_config():
+    return ConnectionConfig(
+        MAIL_USERNAME = settings.mail_username,
+        MAIL_PASSWORD = settings.mail_password,
+        MAIL_FROM = settings.mail_from,
+        MAIL_PORT = settings.mail_port,
+        MAIL_SERVER = settings.mail_server,
+        MAIL_STARTTLS = True,
+        MAIL_SSL_TLS = False,
+        USE_CREDENTIALS = True,
+        VALIDATE_CERTS = True
+    )
 
 async def send_email(user: User):
     """
     Envia o e-mail para o endereço do usuário (user.email).
     :param user: Objeto que contém o atributo 'email'
-    :param file_path: Caminho do arquivo (PDF) já existente para anexo
     """
     try:
+
+        conf = get_mail_config()
 
         message = MessageSchema(
             subject="Relatório automático",
             recipients=[user.email], 
-            body="Olá, segue em anexo o relatório gerado.",
+            body="Olá, seu relatório foi gerado com sucesso no sistema.",
             subtype=MessageType.plain,
         )
 
@@ -37,7 +39,7 @@ async def send_email(user: User):
         await fm.send_message(message)
 
     except Exception as e:
-        print(f"Ocorreu um erro ao enviar o e-mail: {e}")
+        raise HTTPException(status_code=500, detail=f"Ocorreu um erro ao enviar o e-mail: {str(e)}")
 
 if __name__ == "__main__":
 
