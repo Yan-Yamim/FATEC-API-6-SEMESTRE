@@ -82,23 +82,19 @@ async def test_get_distributors_empty_table(client: AsyncClient, session: AsyncS
 
 
 @pytest.mark.asyncio
-async def test_get_distributors_database_error(client: AsyncClient):
+async def test_get_distributors_database_error(client: AsyncClient, monkeypatch):
     """Test GET /distributors with database connection error"""
-    # This test would need to simulate a database error
-    # For now, we'll test the endpoint structure by calling it
-    # In a real scenario, you might mock the database session to raise an exception
-    
+    async def mock_execute(*args, **kwargs):
+        raise Exception("Simulated database failure")
+
+    monkeypatch.setattr(AsyncSession, "execute", mock_execute)
+
     response = await client.get('/dist/distributors')
-    
-    # Should either succeed (if DB is available) or return 500 on error
-    assert response.status_code in [200, 500]
-    
-    if response.status_code == 500:
-        error_data = response.json()
-        assert 'detail' in error_data
-        assert 'Erro interno ao buscar distribuidoras' in error_data['detail']
 
-
+    assert response.status_code == 500
+    error_data = response.json()
+    assert 'detail' in error_data
+    assert 'Erro interno ao buscar distribuidoras' in error_data['detail']
 @pytest.mark.asyncio
 async def test_get_distributors_response_structure(client: AsyncClient, sample_distribuidoras):
     """Test GET /distributors response structure matches expected format"""
