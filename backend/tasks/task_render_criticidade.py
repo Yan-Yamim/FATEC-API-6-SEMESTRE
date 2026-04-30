@@ -11,9 +11,13 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from shapely.geometry import shape
 
-from backend.services.criticidade import get_mongo_collection
+from backend.database import get_mongo_sync_db
+from backend.tasks.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
+
+WAIT_COUNTDOWN = 30
+MAX_WAIT_RETRIES = 60
 
 _CATEGORIA_COR = {
     'Verde': '#4CAF50',
@@ -29,47 +33,32 @@ def _output_dir() -> Path:
     return path
 
 
-async def _buscar_score_criticidade(
-    distribuidora: str, ano: int
-) -> dict | None:
-    doc = await get_mongo_collection('score_criticidade').find_one(
-        {'distribuidora': distribuidora.upper(), 'ano': ano},
-        {'_id': 0},
+@celery_app.task(bind=True, max_retries=MAX_WAIT_RETRIES, name='etl.render_tabela_score')
+def task_render_tabela_score(self, job_id: str, distribuidora: str, ano: int) -> dict:
+    logger.info('[task_render_tabela_score] Inicio. job_id=%s', job_id)
+
+    db = get_mongo_sync_db()
+    score_doc = db['score_criticidade'].find_one(
+        {'distribuidora': distribuidora.upper(), 'ano': ano}, {'_id': 0}
     )
-    return doc
+    mapa_doc = db['mapa_criticidade'].find_one(
+        {'distribuidora': distribuidora.upper(), 'ano': ano}, {'_id': 0}
+    )
 
+    if not score_doc or not mapa_doc:
+        raise self.retry(countdown=WAIT_COUNTDOWN)
 
-async def render_tabela_score_criticidade(
-    distribuidora: str, ano: int
-) -> Path:
-    doc = await _buscar_score_criticidade(distribuidora, ano)
-    if not doc:
-        raise ValueError(
-            f'Score não encontrado para distribuidora={distribuidora} ano={ano}'
-        )
-
-    conjuntos = doc.get('conjuntos', [])
+    conjuntos = mapa_doc.get('conjuntos', [])
     if not conjuntos:
-        raise ValueError('Nenhum conjunto disponível para renderizar a tabela')
+        logger.warning(
+            '[task_render_tabela_score] Nenhum conjunto disponível. job_id=%s', job_id
+        )
+        return {'job_id': job_id, 'status': 'skipped', 'reason': 'no_conjuntos'}
 
-    colunas = [
-        'Conjunto',
-        'DEC Real.',
-        'DEC Limite',
-        'FEC Real.',
-        'FEC Limite',
-        'Desv. DEC %',
-        'Desv. FEC %',
-        'Score',
-        'Categoria',
-    ]
+    colunas = ['Conjunto', 'Desv. DEC %', 'Desv. FEC %', 'Score', 'Categoria']
     linhas = [
         [
-            c.get('dsc_conj') or c.get('ide_conj', ''),
-            f'{c.get("dec_realizado", 0):.2f}',
-            f'{c.get("dec_limite", 0):.2f}',
-            f'{c.get("fec_realizado", 0):.2f}',
-            f'{c.get("fec_limite", 0):.2f}',
+            c.get('ide_conj', ''),
             f'{c.get("desvio_dec", 0):.2f}',
             f'{c.get("desvio_fec", 0):.2f}',
             f'{c.get("score_criticidade", 0):.2f}',
@@ -80,7 +69,7 @@ async def render_tabela_score_criticidade(
 
     n_rows = len(linhas)
     fig_height = max(4, 0.45 * n_rows + 1.5)
-    fig, ax = plt.subplots(figsize=(18, fig_height))
+    fig, ax = plt.subplots(figsize=(14, fig_height))
     ax.set_axis_off()
 
     table = ax.table(
@@ -90,23 +79,22 @@ async def render_tabela_score_criticidade(
     table.set_fontsize(8)
     table.auto_set_column_width(col=list(range(len(colunas))))
 
-    for col_idx, _ in enumerate(colunas):
+    for col_idx in range(len(colunas)):
         cell = table[0, col_idx]
         cell.set_facecolor('#263238')
         cell.set_text_props(color='white', fontweight='bold')
 
     for row_idx, conj in enumerate(conjuntos, start=1):
         cat = conj.get('categoria', 'Verde')
-        cor_hex = _CATEGORIA_COR.get(cat, '#FFFFFF')
-        cor_rgba = mcolors.to_rgba(cor_hex, alpha=0.25)
+        cor_rgba = mcolors.to_rgba(_CATEGORIA_COR.get(cat, '#FFFFFF'), alpha=0.25)
         for col_idx in range(len(colunas)):
             table[row_idx, col_idx].set_facecolor(cor_rgba)
 
-    sig = doc.get('distribuidora', distribuidora.upper())
+    sig = score_doc.get('distribuidora', distribuidora.upper())
     ax.set_title(
         f'Score de Criticidade — {sig} ({ano})\n'
-        f'Score médio: {doc.get("score_criticidade", 0):.2f} | '
-        f'Total conjuntos: {doc.get("quantidade_conjuntos", n_rows)}',
+        f'Score médio: {score_doc.get("score_criticidade", 0):.2f} | '
+        f'Total conjuntos: {score_doc.get("quantidade_conjuntos", n_rows)}',
         fontsize=11,
         pad=12,
     )
@@ -114,29 +102,33 @@ async def render_tabela_score_criticidade(
     out_path = _output_dir() / f'tabela_score_{sig}_{ano}.png'
     plt.savefig(out_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    logger.info('Tabela score_criticidade salva em %s', out_path)
-    return out_path
+
+    logger.info('[task_render_tabela_score] Concluida. job_id=%s path=%s', job_id, out_path)
+    return {'job_id': job_id, 'status': 'done', 'path': str(out_path)}
 
 
-async def render_mapa_calor_criticidade(distribuidora: str, ano: int) -> Path:
-    score_doc = await _buscar_score_criticidade(distribuidora, ano)
-    if not score_doc:
-        raise ValueError(
-            f'Score não encontrado para distribuidora={distribuidora} ano={ano}'
-        )
+@celery_app.task(bind=True, max_retries=MAX_WAIT_RETRIES, name='etl.render_mapa_calor')
+def task_render_mapa_calor(self, job_id: str, distribuidora: str, ano: int) -> dict:
+    logger.info('[task_render_mapa_calor] Inicio. job_id=%s', job_id)
 
-    mapa_doc = await get_mongo_collection('mapa_criticidade').find_one(
-        {'distribuidora': distribuidora.upper(), 'ano': ano},
-        {'_id': 0, 'job_id': 1},
+    db = get_mongo_sync_db()
+    score_doc = db['score_criticidade'].find_one(
+        {'distribuidora': distribuidora.upper(), 'ano': ano}, {'_id': 0}
     )
-    job_id = mapa_doc.get('job_id') if mapa_doc else None
-    if not job_id:
-        raise ValueError(
-            f'job_id não encontrado para distribuidora={distribuidora} ano={ano}'
-        )
+    mapa_doc = db['mapa_criticidade'].find_one(
+        {'distribuidora': distribuidora.upper(), 'ano': ano},
+        {'_id': 0, 'job_id': 1, 'conjuntos': 1},
+    )
+
+    if not score_doc or not mapa_doc:
+        raise self.retry(countdown=WAIT_COUNTDOWN)
+
+    gdb_job_id = mapa_doc.get('job_id')
+    if not gdb_job_id:
+        raise self.retry(countdown=WAIT_COUNTDOWN)
 
     categoria_por_conj: dict[int, str] = {}
-    for conj in score_doc.get('conjuntos', []):
+    for conj in mapa_doc.get('conjuntos', []):
         try:
             ide = int(conj['ide_conj'])
         except (KeyError, ValueError, TypeError):
@@ -144,11 +136,14 @@ async def render_mapa_calor_criticidade(distribuidora: str, ano: int) -> Path:
         categoria_por_conj[ide] = conj.get('categoria', 'Verde')
 
     if not categoria_por_conj:
-        raise ValueError('Nenhum conjunto com categoria encontrado')
+        logger.warning(
+            '[task_render_mapa_calor] Nenhum conjunto com categoria. job_id=%s', job_id
+        )
+        return {'job_id': job_id, 'status': 'skipped', 'reason': 'no_categorias'}
 
     features = []
-    async for doc in get_mongo_collection('segmentos_mt_geo').find(
-        {'job_id': job_id, 'CONJ': {'$in': list(categoria_por_conj.keys())}},
+    for doc in db['segmentos_mt_geo'].find(
+        {'job_id': gdb_job_id, 'CONJ': {'$in': list(categoria_por_conj.keys())}},
         {'_id': 0, 'CONJ': 1, 'geometry': 1},
     ):
         geom_dict = doc.get('geometry')
@@ -161,10 +156,13 @@ async def render_mapa_calor_criticidade(distribuidora: str, ano: int) -> Path:
                 'categoria': categoria_por_conj.get(int(conj_id), 'Verde'),
             })
         except Exception:
-            logger.debug('Geometria inválida descartada. CONJ=%s', conj_id)
+            logger.debug('[task_render_mapa_calor] Geometria inválida descartada. CONJ=%s', conj_id)
 
     if not features:
-        raise ValueError('Nenhuma geometria disponível para renderizar o mapa')
+        logger.warning(
+            '[task_render_mapa_calor] Nenhuma geometria disponível. job_id=%s', job_id
+        )
+        return {'job_id': job_id, 'status': 'skipped', 'reason': 'no_geometries'}
 
     gdf = gpd.GeoDataFrame(features, geometry='geometry', crs='EPSG:4326')
     gdf['cor'] = gdf['categoria'].map(_CATEGORIA_COR)
@@ -197,5 +195,6 @@ async def render_mapa_calor_criticidade(distribuidora: str, ano: int) -> Path:
     out_path = _output_dir() / f'mapa_calor_{sig}_{ano}.png'
     plt.savefig(out_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    logger.info('Mapa de calor salvo em %s', out_path)
-    return out_path
+
+    logger.info('[task_render_mapa_calor] Concluida. job_id=%s path=%s', job_id, out_path)
+    return {'job_id': job_id, 'status': 'done', 'path': str(out_path)}

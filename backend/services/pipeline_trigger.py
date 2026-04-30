@@ -7,15 +7,12 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.models import Distribuidora
-from backend.services.criticidade import (
-    calcular_score_criticidade,
-    criar_mapa_criticidade,
-)
-from backend.services.render_criticidade import (
-    render_mapa_calor_criticidade,
-    render_tabela_score_criticidade,
-)
+from backend.tasks.task_criticidade import task_mapa_criticidade, task_score_criticidade
 from backend.tasks.task_download_gdb import task_download_gdb
+from backend.tasks.task_render_criticidade import (
+    task_render_mapa_calor,
+    task_render_tabela_score,
+)
 
 ARCGIS_ITEM_URL = 'https://www.arcgis.com/sharing/rest/content/items/{item_id}'
 ARCGIS_DOWNLOAD_URL = (
@@ -108,7 +105,7 @@ async def save_distribuidora_job_tracking(
         )
         .values(
             job_id=job_id,
-            processed_at=datetime.now(timezone.utc),
+            processed_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
     )
     await session.execute(stmt)
@@ -139,27 +136,16 @@ async def trigger_pipeline_flow(
 
     task = task_download_gdb.delay(job_id, download_url, distribuidora_id)
 
+    task_score_criticidade.delay(job_id, dist_name, ano)
+    task_mapa_criticidade.delay(job_id, distribuidora_id, dist_name, ano)
+    task_render_tabela_score.delay(job_id, dist_name, ano)
+    task_render_mapa_calor.delay(job_id, dist_name, ano)
+
     await save_distribuidora_job_tracking(
         session=session,
         distribuidora_id=distribuidora_id,
         ano=ano,
         job_id=job_id,
-    )
-
-    await calcular_score_criticidade(ano=ano, distribuidora=dist_name)
-
-    await criar_mapa_criticidade(
-        distribuidora=dist_name,
-        ano=ano,
-        distribuidora_id=distribuidora_id,
-        job_id=job_id,
-    )
-
-    await render_tabela_score_criticidade(
-        distribuidora=dist_name, ano=ano
-    )
-    await render_mapa_calor_criticidade(
-        distribuidora=dist_name, ano=ano
     )
 
     return {
