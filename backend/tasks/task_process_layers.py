@@ -13,6 +13,8 @@ from shapely.ops import transform
 
 from backend.database import get_mongo_sync_db
 from backend.tasks.celery_app import celery_app
+from backend.tasks.task_tam import task_calcular_tam
+
 
 logger = logging.getLogger(__name__)
 SSDMT_INSERT_BATCH_SIZE = 5000
@@ -1007,6 +1009,27 @@ def task_finalizar(
             ssdmt_total,
             unsemt_total,
         )
+
+        try:
+
+            job_info = _get_collection('jobs').find_one({'job_id': job_id}) 
+
+            dist_name = job_info.get('dist_name')
+            date_gdb = job_info.get('ano_gdb')
+
+            metadados_dist = {
+                "id": distribuidora_id,
+                "dist_name": dist_name,
+                "date_gdb": int(date_gdb)
+            }
+
+            logger.info('[task_finalizar] Disparando cálculo automático do TAM. job_id=%s', job_id)
+            
+            task_calcular_tam.delay(job_id=job_id, metadados_dist=metadados_dist)
+
+        except Exception as tam_exc:
+            logger.error('[task_finalizar] Falha ao disparar task do TAM. job_id=%s erro=%s', job_id, tam_exc)
+        
         return {
             'job_id': job_id,
             'distribuidora_id': distribuidora_id,

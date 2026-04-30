@@ -5,11 +5,13 @@ import logging
 import factory
 import pytest
 import pytest_asyncio
+from unittest.mock import patch, MagicMock
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 from testcontainers.postgres import PostgresContainer
+from datetime import datetime
 
 from backend.app import app
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -30,6 +32,34 @@ class UserFactory(factory.Factory):
     email = factory.LazyAttribute(lambda obj: f'{obj.username}@test.com')
     password = factory.LazyAttribute(lambda obj: f'{obj.username}+senha')
 
+
+@pytest_asyncio.fixture
+async def triggered_job(session, setup_distribuidora):
+    """Aciona o trigger_pipeline_flow isolando a rede e retorna o job_id gerado."""
+    from backend.services.pipeline_trigger import trigger_pipeline_flow
+    
+    dist_data = setup_distribuidora
+    
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "id": dist_data["id"],
+        "name": dist_data["dist_name"],
+        "type": "File Geodatabase",
+        "url": "https://link-da-aneel.com/dados.gdb.zip"
+    }
+
+    with patch("httpx.AsyncClient.get", return_value=mock_response):
+        result = await trigger_pipeline_flow(
+            session=session,
+            distribuidora_id=dist_data["id"],
+            ano=dist_data["date_gdb"]
+        )
+    
+    return {
+        "job_id": result["job_id"],
+        "dist_data": dist_data
+    }
 
 @pytest.fixture(scope='session')
 def postgres_container():
@@ -78,19 +108,15 @@ async def session(engine):
 
 
 @pytest_asyncio.fixture
-async def client(session, mongo_db, postgres_container):
+async def client(session, mongo_db):
     app.dependency_overrides[get_session] = lambda: session
-
-    async def _get_mongo_db_override():
-        yield mongo_db
-        
-    app.dependency_overrides[get_mongo_async_database] = _get_mongo_db_override
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url='http://test'
-    ) as ac:
-        yield ac
     
+    async def _get_mongo_override():
+        yield mongo_db
+    app.dependency_overrides[get_mongo_async_database] = _get_mongo_override
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as ac:
+        yield ac
     app.dependency_overrides.clear()
 
 
@@ -139,43 +165,71 @@ async def mongo_db():
     client.close()
 
 
+@pytest.fixture(autouse=True)
+def mock_mongo_db(mongo_db):
+    with patch("backend.services.pipeline_trigger.get_mongo_async_db") as mocked_get_db:
+        mocked_get_db.return_value = mongo_db
+        yield mocked_get_db
+
+
 @pytest_asyncio.fixture
-async def setup_test_data(session, mongo_db):
-    """Prepara os dados brutos reais para o cálculo."""
-    test_job_id = f'real-job-{uuid.uuid4()}'
+async def setup_distribuidora(session):
+    """Cria uma distribuidora com ID real da ANEEL para teste de integração fim-a-fim."""
+    id_real = "75f102e3b2e54e48950d877e8a937a34" 
+    nome_real = "EQUATORIAL ALAGOAS DISTRIBUIDORA DE ENERGIA S.A."
+    ano_teste = 2024
     
     await session.execute(
-        text("INSERT INTO distribuidoras (id, job_id, date_gdb, dist_name) VALUES (:id, :job_id, :ano, :name)"),
-        {"id": uuid.uuid4().hex, "job_id": test_job_id, "ano": 2024, "name": "CEMIG"}
+        text("DELETE FROM distribuidoras WHERE id = :id AND date_gdb = :ano"),
+        {"id": id_real, "ano": ano_teste}
+    )
+    
+    await session.execute(
+        text("""
+            INSERT INTO distribuidoras (id, date_gdb, dist_name) 
+            VALUES (:id, :ano, :nome)
+        """),
+        {"id": id_real, "ano": ano_teste, "nome": nome_real}
+    )
+    await session.commit()
+    
+    return {
+        "id": id_real, 
+        "dist_name": nome_real, 
+        "date_gdb": ano_teste
+    }
+
+
+@pytest_asyncio.fixture
+async def setup_test_data(session, mongo_db, setup_distribuidora):
+    """
+    Simula um job que já passou pelo trigger e download.
+    Prepara o MongoDB exatamente como a pipeline_trigger faria.
+    """
+    dist = setup_distribuidora
+    job_id = str(uuid.uuid4())
+    ano = 2024
+
+    await session.execute(
+        text("UPDATE distribuidoras SET job_id = :job_id WHERE id = :id"),
+        {"job_id": job_id, "id": dist["id"]}
     )
     await session.commit()
 
-    col_segmentos = mongo_db['segmentos_mt_tabular']
-    
-    await col_segmentos.insert_many([
-        {
-            'job_id': test_job_id, 
-            'CTMT': 'CIRC_A', 
-            'COD_ID': str(uuid.uuid4()), 
-            'COMP': 1000.0, 
-            'CONJ': '100'
-        },
-        {
-            'job_id': test_job_id, 
-            'CTMT': 'CIRC_A', 
-            'COD_ID': str(uuid.uuid4()),
-            'COMP': 2000.0, 
-            'CONJ': '100'
-        },
-    ])
-    
-    await mongo_db['conjuntos'].insert_one({
-        'job_id': test_job_id, 
-        'cod_id': '100', 
-        'nome': 'CONJUNTO REAL'
+    await mongo_db['jobs'].insert_one({
+        "job_id": job_id,
+        "distribuidora_id": dist["id"],
+        "dist_name": dist["nome"],
+        "ano_gdb": ano,
+        "status": "completed",
+        "created_at": datetime.utcnow()
     })
 
-    return test_job_id
+    await mongo_db['segmentos_mt_tabular'].insert_one({
+        'job_id': job_id, 'COMP': 5000.0, 'CONJ': '100', 'CTMT': 'CIRC_1'
+    })
+
+    return job_id
 
 
 @pytest_asyncio.fixture

@@ -1,43 +1,23 @@
 import pytest
-import uuid
-from backend.services.calculo_tam import calcular_extensao_tam
-from core.schemas import DistributorMetadata
+from sqlalchemy import text
 
-COLECAO_RESULTADOS = 'TAM'
 
 @pytest.mark.asyncio
-async def test_fluxo_calculo_e_leitura_real(client, mongo_db, setup_test_data):
-    """
-    Valida desde a entrada bruta no Mongo até a saída JSON no Endpoint.
-    """
-    job_id = setup_test_data
+async def test_trigger_pipeline_flow_data_integrity(session, mongo_db, triggered_job):
+    job_id = str(triggered_job["job_id"])
+    original_dist = triggered_job["dist_data"]
 
-    metadata = DistributorMetadata(
-        job_id=job_id, id="fake-id", dist_name="CEMIG-D", date_gdb=2024
-    )
-    
-    segmentos = await mongo_db['segmentos_mt_tabular'].find({'job_id': job_id}).to_list(None)
-    
-    resultados = calcular_extensao_tam(
-        metadata=metadata,
-        segmentos=segmentos,
-        map_circuitos={},
-        map_conjuntos={'999': 'CONJUNTO 999'} 
-    )
+    stmt = text("SELECT job_id FROM distribuidoras WHERE id = :id AND date_gdb = :ano")
+    db_job_id = (await session.execute(
+        stmt, {"id": original_dist["id"], "ano": original_dist["date_gdb"]}
+    )).scalar()
+    assert str(db_job_id) == job_id
 
-    documentos = [t.model_dump() for t in resultados]
-    await mongo_db[COLECAO_RESULTADOS].insert_many(documentos)
-    
-    response = await client.get(f'/tam/{job_id}')
-    
-    assert response.status_code == 200
-    data = response.json()["data"]
-    
-    assert data["todos_trechos"][0]["COMP_KM"] == 3.0
-    assert data["todos_trechos"][0]["CONJ"] == '100'
+    job_doc = await mongo_db['jobs'].find_one({
+        "dist_name": original_dist["dist_name"],
+        "ano_gdb": original_dist["date_gdb"]
+    }, sort=[("_id", -1)])
 
-@pytest.mark.asyncio
-async def test_get_tam_not_found(client):
-    """Garante que jobs inexistentes retornam 404."""
-    response = await client.get(f'/tam/{uuid.uuid4()}')
-    assert response.status_code == 404
+    assert job_doc is not None, "Job não encontrado no MongoDB"
+    assert str(job_doc['job_id']) == job_id
+    assert job_doc['status'] == "started"

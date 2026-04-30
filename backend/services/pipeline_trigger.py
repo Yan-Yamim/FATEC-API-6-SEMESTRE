@@ -116,17 +116,25 @@ async def save_distribuidora_job_tracking(
 
 
 async def init_tam_metadata(
+    session: AsyncSession,
     distribuidora_id: str,
     ano: int,
     job_id: str,
 ) -> None:
-    """Inicializa o rastro do TAM no MongoDB logo após o disparo."""
+    """Inicializa os dados do Job no MongoDB para que as tasks futuras tenham acesso."""
+    
+    stmt = select(Distribuidora.dist_name).where(Distribuidora.id == distribuidora_id)
+    result = await session.execute(stmt)
+    dist_name = result.scalar_one_or_none()
+
     db = get_mongo_async_db()
-    await db.TAM_status.insert_one({
+    
+    await db.jobs.insert_one({
         "job_id": job_id,
         "distribuidora_id": distribuidora_id,
-        "ano": ano,
-        "status": "waiting_download",
+        "dist_name": dist_name,  
+        "ano_gdb": ano,          
+        "status": "started",
         "created_at": datetime.utcnow()
     })
 
@@ -171,7 +179,12 @@ async def trigger_pipeline_flow(
         job_id=job_id,
     )
 
-    await init_tam_metadata(distribuidora_id, ano, job_id)
+    await init_tam_metadata(
+        session=session, 
+        distribuidora_id=distribuidora_id, 
+        ano=ano, 
+        job_id=job_id
+    )
 
     return {
         'job_id': job_id,
