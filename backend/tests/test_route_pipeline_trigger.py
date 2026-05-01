@@ -104,25 +104,28 @@ async def test_pipeline_trigger_chain_contem_todas_as_tasks(
     assert response.status_code == 202
     job_id = response.json()['job_id']
 
-    # chain foi chamado com exatamente 5 signatures (download + 4 pós-ETL)
+    # chain foi chamado com exatamente 6 signatures (download + 5 pós-ETL)
     mock_chain.assert_called_once()
     sigs = mock_chain.call_args.args
-    assert len(sigs) == 5
+    assert len(sigs) == 6
 
     assert sigs[0].task == 'etl.download_gdb'
     assert sigs[0].args == (job_id, 'https://www.arcgis.com/sharing/rest/content/items/item-chain/data', 'item-chain')
 
     assert sigs[1].task == 'etl.score_criticidade'
     assert sigs[1].args == (job_id, 'DIST CHAIN', 2026)
+    
+    assert sigs[2].task == 'etl.calculate_pt_pnt'
+    assert sigs[2].args == (job_id, 'item-chain')
 
-    assert sigs[2].task == 'etl.mapa_criticidade'
-    assert sigs[2].args == (job_id, 'item-chain', 'DIST CHAIN', 2026)
+    assert sigs[3].task == 'etl.mapa_criticidade'
+    assert sigs[3].args == (job_id, 'item-chain', 'DIST CHAIN', 2026)
 
-    assert sigs[3].task == 'etl.render_tabela_score'
-    assert sigs[3].args == (job_id, 'DIST CHAIN', 2026)
-
-    assert sigs[4].task == 'etl.render_mapa_calor'
+    assert sigs[4].task == 'etl.render_tabela_score'
     assert sigs[4].args == (job_id, 'DIST CHAIN', 2026)
+
+    assert sigs[5].task == 'etl.render_mapa_calor'
+    assert sigs[5].args == (job_id, 'DIST CHAIN', 2026)
 
     mock_chain.return_value.delay.assert_called_once()
 

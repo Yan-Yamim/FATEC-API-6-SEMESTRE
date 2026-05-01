@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+from backend.tasks.task_calculate_pt_pnt import task_calculate_pt_pnt
 import httpx
 from celery import chain
 
@@ -138,6 +139,7 @@ async def trigger_pipeline_flow(
     result = chain(
         task_download_gdb.si(job_id, download_url, distribuidora_id),
         task_score_criticidade.si(job_id, dist_name, ano),
+        task_calculate_pt_pnt.si(job_id, distribuidora_id),
         task_mapa_criticidade.si(job_id, distribuidora_id, dist_name, ano),
         task_render_tabela_score.si(job_id, dist_name, ano),
         task_render_mapa_calor.si(job_id, dist_name, ano),
