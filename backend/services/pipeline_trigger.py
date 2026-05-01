@@ -168,9 +168,6 @@ async def trigger_pipeline_flow(
         task_render_tabela_score.si(job_id, dist_name, ano),
         task_render_mapa_calor.si(job_id, dist_name, ano),
     ).delay()
-    
-    enqueue_result = enqueue_download_gdb(download_url, distribuidora_id)
-    job_id = enqueue_result['job_id']
 
     await save_distribuidora_job_tracking(
         session=session,
