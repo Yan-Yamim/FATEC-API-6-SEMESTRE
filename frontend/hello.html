@@ -4,9 +4,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Meu App</title>
   <link rel="stylesheet" href="./style.css?v=4" />
-  <script src="https://unpkg.com/petite-vue@0.2.2/dist/petite-vue.iife.js" defer init></script>
 <body>
-  <div v-scope="app" class="app">
+  <div v-scope class="app">
     <aside class="sidebar">
       <nav class="nav">
         <button :class="{ 'nav-item' : true,'nav-item--active': screen === 'perfil' }" @click="go('perfil')">PERFIL</button>
@@ -145,7 +144,12 @@
       },
 
       go(tela) {
-        this.screen = tela
+        if (tela === 'login') {
+          localStorage.removeItem('access_token')
+          window.location.href = 'login.html'
+        } else if (tela === 'perfil') {
+          window.location.href = 'profile.html'
+        }
       }
     }
     createApp(app).mount()

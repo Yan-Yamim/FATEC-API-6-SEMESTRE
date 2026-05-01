@@ -1,6 +1,7 @@
 from http import HTTPStatus
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .core.schemas import Message
 from .routes import (
@@ -15,6 +16,15 @@ from .routes import (
 )
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Em produção, substitua "*" pelo seu domínio
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(users.router)
 app.include_router(auth.router)
 app.include_router(criticidade.router, prefix='/etl')
