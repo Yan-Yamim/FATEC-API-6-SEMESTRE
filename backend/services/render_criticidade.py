@@ -22,6 +22,14 @@ _CATEGORIA_COR = {
 }
 
 
+def _cor_score(score: float) -> str:
+    if score == 0:
+        return '#c8e6c9'
+    if score <= 50:
+        return '#fff9c4'
+    return '#ffcdd2'
+
+
 @lru_cache(maxsize=None)
 def _output_dir() -> Path:
     path = Path(__file__).resolve().parent.parent.parent / 'output' / 'images'
@@ -42,29 +50,28 @@ async def _buscar_score_criticidade(
 async def render_tabela_score_criticidade(
     distribuidora: str, ano: int
 ) -> Path:
-    doc = await _buscar_score_criticidade(distribuidora, ano)
-    if not doc:
+    score_doc = await _buscar_score_criticidade(distribuidora, ano)
+    if not score_doc:
         raise ValueError(
             f'Score não encontrado para distribuidora={distribuidora} ano={ano}'
         )
 
-    conjuntos = doc.get('conjuntos', [])
+    mapa_doc = await get_mongo_collection('mapa_criticidade').find_one(
+        {'distribuidora': distribuidora.upper(), 'ano': ano}, {'_id': 0}
+    )
+    if not mapa_doc:
+        raise ValueError(
+            f'Mapa de criticidade não encontrado para distribuidora={distribuidora} ano={ano}'
+        )
+
+    conjuntos = mapa_doc.get('conjuntos', [])
     if not conjuntos:
         raise ValueError('Nenhum conjunto disponível para renderizar a tabela')
 
-    colunas = [
-        'Conjunto',
-        'DEC Real.',
-        'DEC Limite',
-        'FEC Real.',
-        'FEC Limite',
-        'Desv. DEC %',
-        'Desv. FEC %',
-        'Score',
-        'Categoria',
-    ]
+    colunas = ['#', 'Conjunto', 'DEC Real.', 'DEC Lim.', 'FEC Real.', 'FEC Lim.', 'Desv. DEC %', 'Desv. FEC %', 'Score']
     linhas = [
         [
+            rank,
             c.get('dsc_conj') or c.get('ide_conj', ''),
             f'{c.get("dec_realizado", 0):.2f}',
             f'{c.get("dec_limite", 0):.2f}',
@@ -73,9 +80,8 @@ async def render_tabela_score_criticidade(
             f'{c.get("desvio_dec", 0):.2f}',
             f'{c.get("desvio_fec", 0):.2f}',
             f'{c.get("score_criticidade", 0):.2f}',
-            c.get('categoria', ''),
         ]
-        for c in conjuntos
+        for rank, c in enumerate(conjuntos, start=1)
     ]
 
     n_rows = len(linhas)
@@ -90,23 +96,21 @@ async def render_tabela_score_criticidade(
     table.set_fontsize(8)
     table.auto_set_column_width(col=list(range(len(colunas))))
 
-    for col_idx, _ in enumerate(colunas):
+    for col_idx in range(len(colunas)):
         cell = table[0, col_idx]
         cell.set_facecolor('#263238')
         cell.set_text_props(color='white', fontweight='bold')
 
+    score_col_idx = len(colunas) - 1
     for row_idx, conj in enumerate(conjuntos, start=1):
-        cat = conj.get('categoria', 'Verde')
-        cor_hex = _CATEGORIA_COR.get(cat, '#FFFFFF')
-        cor_rgba = mcolors.to_rgba(cor_hex, alpha=0.25)
-        for col_idx in range(len(colunas)):
-            table[row_idx, col_idx].set_facecolor(cor_rgba)
+        score = conj.get('score_criticidade', 0)
+        table[row_idx, score_col_idx].set_facecolor(mcolors.to_rgba(_cor_score(score)))
 
-    sig = doc.get('distribuidora', distribuidora.upper())
+    sig = score_doc.get('distribuidora', distribuidora.upper())
     ax.set_title(
         f'Score de Criticidade — {sig} ({ano})\n'
-        f'Score médio: {doc.get("score_criticidade", 0):.2f} | '
-        f'Total conjuntos: {doc.get("quantidade_conjuntos", n_rows)}',
+        f'Score médio: {score_doc.get("score_criticidade", 0):.2f} | '
+        f'Total conjuntos: {score_doc.get("quantidade_conjuntos", n_rows)}',
         fontsize=11,
         pad=12,
     )

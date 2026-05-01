@@ -26,6 +26,14 @@ _CATEGORIA_COR = {
 }
 
 
+def _cor_score(score: float) -> str:
+    if score == 0:
+        return '#c8e6c9'
+    if score <= 50:
+        return '#fff9c4'
+    return '#ffcdd2'
+
+
 @lru_cache(maxsize=None)
 def _output_dir() -> Path:
     path = Path(__file__).resolve().parent.parent.parent / 'output' / 'images'
@@ -55,21 +63,25 @@ def task_render_tabela_score(self, job_id: str, distribuidora: str, ano: int) ->
         )
         return {'job_id': job_id, 'status': 'skipped', 'reason': 'no_conjuntos'}
 
-    colunas = ['Conjunto', 'Desv. DEC %', 'Desv. FEC %', 'Score', 'Categoria']
+    colunas = ['#', 'Conjunto', 'DEC Real.', 'DEC Lim.', 'FEC Real.', 'FEC Lim.', 'Desv. DEC %', 'Desv. FEC %', 'Score']
     linhas = [
         [
-            c.get('ide_conj', ''),
+            rank,
+            c.get('dsc_conj') or c.get('ide_conj', ''),
+            f'{c.get("dec_realizado", 0):.2f}',
+            f'{c.get("dec_limite", 0):.2f}',
+            f'{c.get("fec_realizado", 0):.2f}',
+            f'{c.get("fec_limite", 0):.2f}',
             f'{c.get("desvio_dec", 0):.2f}',
             f'{c.get("desvio_fec", 0):.2f}',
             f'{c.get("score_criticidade", 0):.2f}',
-            c.get('categoria', ''),
         ]
-        for c in conjuntos
+        for rank, c in enumerate(conjuntos, start=1)
     ]
 
     n_rows = len(linhas)
     fig_height = max(4, 0.45 * n_rows + 1.5)
-    fig, ax = plt.subplots(figsize=(14, fig_height))
+    fig, ax = plt.subplots(figsize=(18, fig_height))
     ax.set_axis_off()
 
     table = ax.table(
@@ -84,11 +96,10 @@ def task_render_tabela_score(self, job_id: str, distribuidora: str, ano: int) ->
         cell.set_facecolor('#263238')
         cell.set_text_props(color='white', fontweight='bold')
 
+    score_col_idx = len(colunas) - 1
     for row_idx, conj in enumerate(conjuntos, start=1):
-        cat = conj.get('categoria', 'Verde')
-        cor_rgba = mcolors.to_rgba(_CATEGORIA_COR.get(cat, '#FFFFFF'), alpha=0.25)
-        for col_idx in range(len(colunas)):
-            table[row_idx, col_idx].set_facecolor(cor_rgba)
+        score = conj.get('score_criticidade', 0)
+        table[row_idx, score_col_idx].set_facecolor(mcolors.to_rgba(_cor_score(score)))
 
     sig = score_doc.get('distribuidora', distribuidora.upper())
     ax.set_title(

@@ -189,7 +189,7 @@ def task_mapa_criticidade(
     dados_limites = _buscar_limites(db, ano, distribuidora)
 
     realizados_dict = {
-        (r['sig_agente'], r['ide_conj'], r['sig_indicador']): r['valor_realizado']
+        (r['sig_agente'], r['ide_conj'], r['sig_indicador']): (r['valor_realizado'], r.get('dsc_conj', ''))
         for r in dados_realizados
     }
     limites_dict = {
@@ -198,20 +198,29 @@ def task_mapa_criticidade(
     }
 
     conjuntos: dict[str, dict] = {}
-    for (sig_agente, ide_conj, sig_indicador), valor_realizado in realizados_dict.items():
+    for (sig_agente, ide_conj, sig_indicador), (valor_realizado, dsc_conj) in realizados_dict.items():
         limite = limites_dict.get((sig_agente, ide_conj, sig_indicador), 0.0)
         desvio = _calcular_desvio(valor_realizado, limite)
         if ide_conj not in conjuntos:
             conjuntos[ide_conj] = {
                 'ide_conj': ide_conj,
+                'dsc_conj': dsc_conj,
+                'dec_realizado': 0.0,
+                'dec_limite': 0.0,
+                'fec_realizado': 0.0,
+                'fec_limite': 0.0,
                 'desvio_dec': 0.0,
                 'desvio_fec': 0.0,
                 'score_criticidade': 0.0,
             }
         if sig_indicador == 'DEC':
             conjuntos[ide_conj]['desvio_dec'] = round(desvio, 4)
+            conjuntos[ide_conj]['dec_realizado'] = round(valor_realizado, 4)
+            conjuntos[ide_conj]['dec_limite'] = round(limite, 4)
         elif sig_indicador == 'FEC':
             conjuntos[ide_conj]['desvio_fec'] = round(desvio, 4)
+            conjuntos[ide_conj]['fec_realizado'] = round(valor_realizado, 4)
+            conjuntos[ide_conj]['fec_limite'] = round(limite, 4)
 
     for c in conjuntos.values():
         score = c['desvio_dec'] + c['desvio_fec']

@@ -4,6 +4,7 @@ from celery.exceptions import Retry
 from shapely.geometry import LineString, mapping
 
 from backend.tasks.task_render_criticidade import (
+    _cor_score,
     task_render_mapa_calor,
     task_render_tabela_score,
 )
@@ -27,13 +28,23 @@ _MAPA_DOC = {
     'conjuntos': [
         {
             'ide_conj': '100',
+            'dsc_conj': 'CONJ A',
+            'dec_realizado': 15.0,
+            'dec_limite': 10.0,
+            'fec_realizado': 12.0,
+            'fec_limite': 10.0,
             'desvio_dec': 50.0,
-            'desvio_fec': 0.0,
-            'score_criticidade': 50.0,
+            'desvio_fec': 20.0,
+            'score_criticidade': 70.0,
             'categoria': 'Vermelho',
         },
         {
             'ide_conj': '200',
+            'dsc_conj': 'CONJ B',
+            'dec_realizado': 5.0,
+            'dec_limite': 10.0,
+            'fec_realizado': 3.0,
+            'fec_limite': 10.0,
             'desvio_dec': 0.0,
             'desvio_fec': 0.0,
             'score_criticidade': 0.0,
@@ -63,6 +74,26 @@ def _make_db(score_doc=_SCORE_DOC, mapa_doc=_MAPA_DOC, geo_docs=None):
 
     db.__getitem__.side_effect = _getitem
     return db
+
+
+# ---------------------------------------------------------------------------
+# _cor_score
+# ---------------------------------------------------------------------------
+
+
+def test_cor_score_zero_retorna_verde():
+    assert _cor_score(0) == '#c8e6c9'
+
+
+def test_cor_score_ate_50_retorna_amarelo():
+    assert _cor_score(0.001) == '#fff9c4'
+    assert _cor_score(25) == '#fff9c4'
+    assert _cor_score(50) == '#fff9c4'
+
+
+def test_cor_score_acima_50_retorna_vermelho():
+    assert _cor_score(50.001) == '#ffcdd2'
+    assert _cor_score(1000) == '#ffcdd2'
 
 
 # ---------------------------------------------------------------------------
