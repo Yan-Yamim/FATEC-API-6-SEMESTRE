@@ -78,7 +78,7 @@
   </div>
 
 <script type="module">
-  import { createApp, reactive } from 'https://unpkg.com/petite-vue?module'
+  import { createApp, reactive } from 'https://unpkg.com/petite-vue@0.4.1?module'
 
   const store = reactive({
     screen: 'documents',
@@ -88,6 +88,8 @@
     anoOptions: [],
 
     selecionarDist() {
+      store.filters.ano = ''
+      
       const anos = new Set()
       store.registros
         .filter(r => !store.filters.tipo || r.nome === store.filters.tipo)
@@ -97,15 +99,15 @@
 
     async gerarPDF() {
       const payload = {
-        dist_id: this.filters.tipo,
+        distribuidora_id: this.filters.tipo,
         ano: this.filters.ano
       }
-      if (!payload.dist_id || !payload.ano) {
+      if (!payload.distribuidora_id || !payload.ano) {
         alert('Selecione distribuidora e ano antes de gerar o PDF.')
         return
       }
       try {
-        const res = await fetch('http://localhost:8000/trigger', {
+        const res = await fetch('http://localhost:8000/pipeline/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', accept: 'application/json' },
           body: JSON.stringify(payload)
