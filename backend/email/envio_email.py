@@ -66,7 +66,7 @@ async def send_email(user: User, file_path: str):
         message = MessageSchema(
             subject="Relatório automático",
             recipients=[user.email], 
-            body="Olá, segue em anexo o relatório gerado.",
+            body=f"Olá {user.username}, segue em anexo o relatório gerado.",
             subtype=MessageType.plain,
             attachments=[file_path]
         )
