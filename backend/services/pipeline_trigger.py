@@ -1,16 +1,18 @@
 import uuid
 from datetime import datetime, timezone
 
-from backend.tasks.task_calculate_sam import task_calculate_sam
-from backend.tasks.task_calculate_pt_pnt import task_calculate_pt_pnt
 import httpx
 from celery import chain
-
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.models import Distribuidora
-from backend.tasks.task_criticidade import task_mapa_criticidade, task_score_criticidade
+from backend.tasks.task_calculate_pt_pnt import task_calculate_pt_pnt
+from backend.tasks.task_calculate_sam import task_calculate_sam
+from backend.tasks.task_criticidade import (
+    task_mapa_criticidade,
+    task_score_criticidade,
+)
 from backend.tasks.task_download_gdb import task_download_gdb
 from backend.tasks.task_render_criticidade import (
     task_render_mapa_calor,

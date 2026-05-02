@@ -18,9 +18,9 @@ MAX_WAIT_RETRIES = 60
 def task_calculate_sam(
     self,
     job_id: str,
-    distribuidora_id: str | None = None,
-    sig_agente: str | None = None,
-    ano_indice: int | None = None,
+    distribuidora_id: str,
+    sig_agente: str,
+    ano_indice: int,
 ) -> dict:
 
     logger.info(
@@ -34,7 +34,7 @@ def task_calculate_sam(
 
     if not job or job.get('status') != 'completed':
         logger.info(
-            '[task_calculate_sam] ETL ainda não concluído,'
+            '[task_calculate_sam] ETL ainda não concluído, '
             'aguardando. job_id=%s',
             job_id,
         )
