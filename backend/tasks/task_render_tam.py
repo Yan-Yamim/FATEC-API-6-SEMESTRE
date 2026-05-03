@@ -110,10 +110,5 @@ def task_render_grafico_tam(self, job_id: str) -> dict:
             'path': str(out_path)
         }
 
-    except Exception as e:
-        logger.error('[task_render_grafico_tam] Erro fatal: %s', str(e))
-        return {
-            'job_id': job_id, 
-            'status': 'error', 
-            'reason': str(e)
-        }
+    except Exception:
+         logger.exception('[task_render_grafico_tam] Erro fatal. job_id=%s', job_id)

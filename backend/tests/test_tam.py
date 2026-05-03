@@ -1,5 +1,5 @@
 from unittest.mock import patch, AsyncMock, MagicMock
-from services.render_tam import render_grafico_barras_tam
+from backend.services.render_tam import render_grafico_barras_tam
 
 import pytest
 from sqlalchemy import text
@@ -61,7 +61,7 @@ async def test_render_grafico_barras_tam_sucesso(monkeypatch):
     mock_coll_obj.find.return_value = mock_cursor
 
     monkeypatch.setattr(
-        'services.render_tam.get_mongo_collection',
+        'backend.services.render_tam.get_mongo_collection',
         lambda name: mock_coll_obj
     )
 
@@ -83,7 +83,7 @@ async def test_render_grafico_tam_vazio(monkeypatch):
     mock_coll_obj.find.return_value = mock_cursor
 
     monkeypatch.setattr(
-        'services.render_tam.get_mongo_collection',
+        'backend.services.render_tam.get_mongo_collection',
         lambda name: mock_coll_obj
     )
 
