@@ -82,14 +82,16 @@
 
   const store = reactive({
     screen: 'documents',
-    filters: { tipo: '', ano: '' },
+    filters: { tipo: '', distribuidora_id: '', ano: '' },
     registros: [],
     distOptions: [],
     anoOptions: [],
 
     selecionarDist() {
       store.filters.ano = ''
-      
+      const selected = store.distOptions.find(d => d.nome === store.filters.tipo)
+      store.filters.distribuidora_id = selected ? selected.id : ''
+
       const anos = new Set()
       store.registros
         .filter(r => !store.filters.tipo || r.nome === store.filters.tipo)
@@ -99,7 +101,7 @@
 
     async gerarPDF() {
       const payload = {
-        distribuidora_id: this.filters.tipo,
+        distribuidora_id: this.filters.distribuidora_id,
         ano: this.filters.ano
       }
       if (!payload.distribuidora_id || !payload.ano) {
@@ -122,7 +124,16 @@
       }
     },
 
-    go(tela) { this.screen = tela }
+    go(tela) {
+      if (tela === 'login') {
+        localStorage.removeItem('access_token')
+        window.location.href = 'login.html'
+      } else if (tela === 'perfil') {
+        window.location.href = 'profile.html'
+      } else {
+        this.screen = tela
+      }
+    }
   })
 
   fetch('http://localhost:8000/dist/distributors', {
@@ -132,11 +143,11 @@
   .then(data => {
     const mapa = new Map()
     data.forEach(r => {
-      if (!mapa.has(r.nome)) mapa.set(r.nome, r.nome)
+      if (!mapa.has(r.nome)) mapa.set(r.nome, r.id)
     })
 
     store.registros = data
-    store.distOptions = Array.from(mapa, ([nome]) => ({ id: nome, nome }))
+    store.distOptions = Array.from(mapa, ([nome, id]) => ({ id, nome }))
 
     const anos = new Set()
     data.forEach(r => anos.add(r.ano))
@@ -145,16 +156,7 @@
     console.log('Distribuidoras únicas:', store.distOptions.length)
   })
 
-      go(tela) {
-        if (tela === 'login') {
-          localStorage.removeItem('access_token')
-          window.location.href = 'login.html'
-        } else if (tela === 'perfil') {
-          window.location.href = 'profile.html'
-        }
-      }
-    }
-    createApp(store).mount()
+  createApp(store).mount()
   </script>
 </body>
 </html>
