@@ -52,10 +52,11 @@ def task_render_sam(
         return {'job_id': job_id, 'status': 'skipped', 'reason': 'no_records'}
 
     conjuntos = [r.get('nome') or r.get('conjunto', '') for r in records]
-    sam_vals = np.array([r.get('sam_km', 0.0) for r in records])
+    sam_vals  = np.array([r.get('sam_km', 0.0) for r in records])
 
+    # Inverte para o maior ficar no topo
     conjuntos = conjuntos[::-1]
-    sam_vals = sam_vals[::-1]
+    sam_vals  = sam_vals[::-1]
 
     y = np.arange(len(conjuntos))
 
@@ -66,7 +67,21 @@ def task_render_sam(
 
     ax.barh(y, sam_vals, height=0.55, color=_COR_SAM, zorder=3)
 
-    ax.set_xlim(left=0)
+    # Expande o eixo X para caber os valores no final das barras
+    max_val = sam_vals.max() if sam_vals.max() > 0 else 1
+    ax.set_xlim(left=0, right=max_val * 1.15)
+
+    # Valor no final de cada barra
+    for i, val in enumerate(sam_vals):
+        if val > 0:
+            ax.text(
+                val + max_val * 0.01,
+                i,
+                f'{val:.3f}',
+                va='center', ha='left',
+                fontsize=7, color='#333333',
+            )
+
     ax.set_yticks(y)
     ax.set_yticklabels(conjuntos, fontsize=8, color='#333333')
     ax.xaxis.set_major_formatter(
@@ -81,7 +96,8 @@ def task_render_sam(
     ax.grid(axis='x', color='#eeeeee', linewidth=0.8, zorder=0)
 
     ax.set_title(
-        f'Gráfico de todos os Conjuntos (SAM)\n{sig_agente} |  Ano: {ano}',
+        f'Gráfico de todos os Conjuntos (SAM)\n'
+        f'{sig_agente} |  Ano: {ano}',
         fontsize=11,
         color='#222222',
         pad=14,
