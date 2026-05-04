@@ -21,12 +21,13 @@ Tasks existentes:
 - `etl.processar_ssdmt`
 - `etl.processar_ssdmt_chunk`
 - `etl.extrair_gdb` (decide se usa chunk)
-- `etl.finalizar` (ainda placeholder de consolidacao)
+- `etl.finalizar` (consolida SSDMT e persiste no Mongo)
 
 Resumo:
 - `SSDMT` NAO retorna mais lista gigante no payload Celery.
 - O processamento escreve em NDJSON local no volume compartilhado.
 - O retorno traz metadados e caminhos dos arquivos (`path`, `records_count`).
+- `etl.finalizar` consolida arquivos NDJSON (full/chunk), persiste no Mongo e limpa temporarios apos sucesso.
 
 ---
 
@@ -150,29 +151,139 @@ Mensagens devem incluir contagens (`total_lidos`, `descartados`, `falhas_reproje
 
 ---
 
-## Finalizacao (Status Atual e Proxima Etapa)
+## Finalizacao (Payload Definitivo + Persistencia Mongo)
 
-Status atual:
-- `etl.finalizar` ainda e placeholder.
-- Hoje retorna apenas resumo (`status`, `results_count`, `zip_path`, `tmp_dir`).
+Objetivo da `etl.finalizar` para SSDMT:
+- consolidar os resultados `SSDMT` e `SSDMT_CHUNK` por `job_id`
+- persistir no Mongo em formato util para notebook
+- manter compatibilidade de nomes com notebooks existentes (campos em maiusculo)
 
-Proxima etapa obrigatoria:
-- consolidar resultados do chord
-- preparar payload definitivo para persistencia no Mongo
-- opcionalmente salvar no Mongo na propria `etl.finalizar` ou em task dedicada
+### Melhor Estrategia de Persistencia (Recomendada)
 
-### Regras para a proxima IA (Mongo)
+Salvar em DUAS colecoes, separando uso tabular e geoespacial:
 
-1. Nao quebrar formato atual das tasks CTMT/CONJ/SSDMT.
-2. Ler `path` NDJSON de `ssdmt_tabular` e `ssdmt_geo` no `results` do chord.
-3. Se houver chunks, consolidar todos os arquivos por `job_id`.
-4. Persistir com schema consistente para notebook:
-	- colecao tabular
-	- colecao geo
-5. Criar indices minimos:
-	- `job_id`
-	- `job_id + cod_id`
-	- geoespacial em `geometry` quando aplicavel.
+1. `segmentos_mt_tabular`
+- uso principal em notebooks de calculo (`COMP`, agregacoes por `CONJ`, joins com CTMT/CONJ)
+- um documento por segmento
+
+2. `segmentos_mt_geo`
+- uso em notebook de mapa/plot geoespacial
+- um documento por segmento com `geometry` GeoJSON
+
+Justificativa:
+- evita documento gigante >16MB
+- facilita consultas por `job_id` e por conjunto
+- separa workloads tabulares de geoespaciais
+- permite indice `2dsphere` sem impactar consulta tabular
+
+### Compatibilidade com Notebooks (Obrigatorio)
+
+Embora o processamento interno use `cod_id`, `ctmt`, `conj`, `comp`, `dist`,
+na persistencia final devem ser gravados os aliases em MAIUSCULO:
+
+- `COD_ID`, `CTMT`, `CONJ`, `COMP`, `DIST`
+- `job_id`, `processed_at` (metadados em snake_case)
+
+Para geometria, manter campo:
+- `geometry` (GeoJSON em EPSG:4326)
+
+Recomendacao de compatibilidade:
+- gravar os campos em maiusculo como fonte oficial para notebooks
+- opcionalmente manter os minusculos apenas como espelho tecnico temporario
+
+### Contrato de Payload Consolidado em `etl.finalizar`
+
+`etl.finalizar` deve montar um payload consolidado de SSDMT antes de salvar:
+
+```json
+{
+	"layer": "SSDMT",
+	"job_id": "<id>",
+	"processed_at": "2026-04-07T10:00:00+00:00",
+	"total": 123456,
+	"descartados": 123,
+	"falhas_reprojecao": 10,
+	"sources": {
+		"mode": "full|chunked",
+		"chunks": 8,
+		"tabular_paths": ["/data/tmp/..._ssdmt_tabular_chunk_00000.ndjson"],
+		"geo_paths": ["/data/tmp/..._ssdmt_geo_chunk_00000.ndjson"]
+	}
+}
+```
+
+Observacao:
+- este payload e de controle/orquestracao
+- o volume de dados fica no Mongo (nao retornar `records` no Celery result)
+
+### Schema Recomendado no Mongo
+
+#### Colecao `segmentos_mt_tabular`
+
+```json
+{
+	"job_id": "<id>",
+	"COD_ID": "MT123",
+	"CTMT": "CT001",
+	"CONJ": "12807",
+	"COMP": 153.2,
+	"DIST": "404",
+	"processed_at": "2026-04-07T10:00:00+00:00"
+}
+```
+
+#### Colecao `segmentos_mt_geo`
+
+```json
+{
+	"job_id": "<id>",
+	"COD_ID": "MT123",
+	"CTMT": "CT001",
+	"CONJ": "12807",
+	"COMP": 153.2,
+	"DIST": "404",
+	"processed_at": "2026-04-07T10:00:00+00:00",
+	"geometry": {
+		"type": "LineString",
+		"coordinates": [[-46.0, -23.0], [-46.1, -23.1]]
+	}
+}
+```
+
+### Indices Minimos (Obrigatorios)
+
+Em `segmentos_mt_tabular`:
+- `create_index([("job_id", 1)], background=True)`
+- `create_index([("job_id", 1), ("COD_ID", 1)], unique=True, background=True)`
+- `create_index([("job_id", 1), ("CONJ", 1)], background=True)`
+- `create_index([("job_id", 1), ("CTMT", 1)], background=True)`
+
+Em `segmentos_mt_geo`:
+- `create_index([("job_id", 1)], background=True)`
+- `create_index([("job_id", 1), ("COD_ID", 1)], unique=True, background=True)`
+- `create_index([("geometry", "2dsphere")], background=True)`
+
+### Fluxo Recomendado dentro de `etl.finalizar`
+
+1. Filtrar resultados `SSDMT` e `SSDMT_CHUNK` de `results`.
+2. Consolidar `path` de `ssdmt_tabular` e `ssdmt_geo`.
+3. Ler NDJSON em streaming (sem carregar tudo em memoria).
+4. Normalizar nomes para maiusculo (`COD_ID`, `CTMT`, `CONJ`, `COMP`, `DIST`).
+5. Fazer escrita idempotente por `job_id`:
+	- `delete_many({"job_id": job_id})` nas 2 colecoes
+	- `insert_many` em lotes (bulk)
+6. Atualizar `jobs` com:
+	- `ssdmt_total`, `ssdmt_descartados`, `ssdmt_falhas_reprojecao`, `status`
+7. Remover arquivos temporarios NDJSON apos sucesso.
+
+### Tratamento de Falhas e Rollback
+
+Se qualquer erro ocorrer durante consolidacao/persistencia:
+1. limpar `segmentos_mt_tabular` e `segmentos_mt_geo` por `job_id`
+2. marcar `jobs.status='failed'` com `error_message`
+3. relancar excecao
+
+Isso evita meio-job persistido e garante idempotencia de reprocessamento.
 
 ---
 
@@ -212,10 +323,12 @@ Cobre:
 ## Checklist de Implementacao para a Proxima IA
 
 1. Ler este documento e confirmar contrato atual das tasks.
-2. Implementar consolidacao real na `etl.finalizar` sem quebrar os testes existentes.
-3. Adicionar testes para finalizacao com:
+2. Implementar consolidacao real na `etl.finalizar` para SSDMT sem quebrar os testes existentes.
+3. Garantir persistencia com nomes compativeis para notebook (`COD_ID`, `CTMT`, `CONJ`, `COMP`, `DIST`).
+4. Criar indices nas colecoes `segmentos_mt_tabular` e `segmentos_mt_geo`.
+5. Adicionar testes para finalizacao com:
 	- SSDMT full
 	- SSDMT chunk
 	- mistura de camadas CTMT/CONJ/SSDMT
-4. Validar fluxo end-to-end com 1 worker e com chunk opcional.
-
+6. Validar rollback de erro limpando colecoes por `job_id`.
+7. Validar fluxo end-to-end com 1 worker e com chunk opcional.

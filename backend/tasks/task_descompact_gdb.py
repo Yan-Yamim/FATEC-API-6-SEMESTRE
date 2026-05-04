@@ -40,6 +40,30 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         'PERD_A4_B',
         'PERD_B_A3a',
         'PERD_B_A4',
+        'PNTMT_01',
+        'PNTMT_02',
+        'PNTMT_03',
+        'PNTMT_04',
+        'PNTMT_05',
+        'PNTMT_06',
+        'PNTMT_07',
+        'PNTMT_08',
+        'PNTMT_09',
+        'PNTMT_10',
+        'PNTMT_11',
+        'PNTMT_12',
+        'PNTBT_01',
+        'PNTBT_02',
+        'PNTBT_03',
+        'PNTBT_04',
+        'PNTBT_05',
+        'PNTBT_06',
+        'PNTBT_07',
+        'PNTBT_08',
+        'PNTBT_09',
+        'PNTBT_10',
+        'PNTBT_11',
+        'PNTBT_12',
     },
     'SSDMT': {
         'COD_ID',
@@ -49,6 +73,7 @@ REQUIRED_SCHEMA: dict[str, set[str]] = {
         'DIST',
     },
     'CONJ': {'COD_ID', 'NOME', 'DIST'},
+    'UNSEMT': {'COD_ID', 'CONJ', 'TIP_UNID', 'SIT_ATIV'},
 }
 
 
@@ -61,7 +86,12 @@ def _get_layer_feature_count(gdb_path: str, layer: str) -> int:
 
 
 @celery_app.task(bind=True, name='etl.extrair_gdb')
-def task_descompact_gdb(self, job_id: str, zip_path: str) -> dict:
+def task_descompact_gdb(
+    self,
+    job_id: str,
+    zip_path: str,
+    distribuidora_id: str | None = None,
+) -> dict:
     logger.info(
         '[task_descompact_gdb] Inicio da extracao. job_id=%s zip_path=%s',
         job_id,
@@ -132,8 +162,18 @@ def task_descompact_gdb(self, job_id: str, zip_path: str) -> dict:
             )
 
         header_tasks = [
-            signature('etl.processar_ctmt', args=(job_id, gdb_path)),
-            signature('etl.processar_conj', args=(job_id, gdb_path)),
+            signature(
+                'etl.processar_ctmt',
+                args=(job_id, gdb_path, distribuidora_id),
+            ),
+            signature(
+                'etl.processar_conj',
+                args=(job_id, gdb_path, distribuidora_id),
+            ),
+            signature(
+                'etl.processar_unsemt',
+                args=(job_id, gdb_path, distribuidora_id),
+            ),
         ]
 
         if SSDMT_PARALLEL_CHUNK_SIZE > 0:
@@ -160,21 +200,31 @@ def task_descompact_gdb(self, job_id: str, zip_path: str) -> dict:
                                 chunk_index,
                                 start_index,
                                 SSDMT_PARALLEL_CHUNK_SIZE,
+                                distribuidora_id,
                             ),
                         )
                     )
             else:
                 header_tasks.append(
-                    signature('etl.processar_ssdmt', args=(job_id, gdb_path))
+                    signature(
+                        'etl.processar_ssdmt',
+                        args=(job_id, gdb_path, distribuidora_id),
+                    )
                 )
         else:
             header_tasks.append(
-                signature('etl.processar_ssdmt', args=(job_id, gdb_path))
+                signature(
+                    'etl.processar_ssdmt',
+                    args=(job_id, gdb_path, distribuidora_id),
+                )
             )
 
         chord(
             header_tasks,
-            signature('etl.finalizar', args=(job_id, zip_path, str(tmp_dir))),
+            signature(
+                'etl.finalizar',
+                args=(job_id, zip_path, str(tmp_dir), distribuidora_id),
+            ),
         ).delay()
         logger.info(
             '[task_descompact_gdb] Chord disparado. job_id=%s callbacks=etl.finalizar tasks=%s',
@@ -184,6 +234,7 @@ def task_descompact_gdb(self, job_id: str, zip_path: str) -> dict:
 
         result = {
             'job_id': job_id,
+            'distribuidora_id': distribuidora_id,
             'gdb_path': gdb_path,
             'status': 'extracted',
         }

@@ -8,12 +8,16 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - REPORTS_DIR=/app/output/reports
     depends_on:
       - db
       - mongodb
       - redis
     volumes:
       - gdb_data:/data
+      - ./output:/app/output
+      - /var/run/docker.sock:/var/run/docker.sock
 
   worker:
     build: .
@@ -35,10 +39,12 @@ services:
       - SSDMT_BATCH_SIZE=${SSDMT_BATCH_SIZE:-10000}
       - SSDMT_PROGRESS_LOG_INTERVAL_BATCHES=${SSDMT_PROGRESS_LOG_INTERVAL_BATCHES:-25}
       - SSDMT_PARALLEL_CHUNK_SIZE=${SSDMT_PARALLEL_CHUNK_SIZE:-0}
+      - REPORTS_DIR=/app/output/reports
     depends_on:
       - redis
     volumes:
       - gdb_data:/data
+      - ./output:/app/output
     cpus: ${WORKER_CPUS:-4.0}
     mem_limit: ${WORKER_MEMORY:-8g}
 
@@ -46,7 +52,18 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
-
+  mongo-express:
+      image: mongo-express
+      restart: always
+      ports:
+        - "8081:8081"
+      environment:
+        ME_CONFIG_MONGODB_URL: ${MONGO_URI}
+        ME_CONFIG_BASICAUTH: "false"
+      env_file:
+        - .env
+      depends_on:
+        - mongodb
   db:
     image: postgres:16
     environment:
@@ -54,7 +71,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -70,6 +87,13 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
 
 volumes:
   mongo_data:

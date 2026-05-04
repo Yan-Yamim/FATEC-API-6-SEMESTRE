@@ -8,6 +8,7 @@ def _env_bool(name: str, default: bool) -> bool:
         return default
     return value.strip().lower() in {'1', 'true', 'yes', 'on'}
 
+
 # Instancia Celery
 celery_app = Celery(
     'etl',
@@ -18,6 +19,15 @@ celery_app = Celery(
         'backend.tasks.task_descompact_gdb',
         'backend.tasks.task_process_layers',
         'backend.tasks.task_load_dec_fec',
+        'backend.tasks.task_calculate_pt_pnt',
+        'backend.tasks.task_criticidade',
+        'backend.tasks.task_tam',
+        'backend.tasks.task_render_tam',
+        'backend.tasks.task_render_criticidade',
+        'backend.tasks.task_render_pt_and_pnt',
+        'backend.tasks.task_calculate_sam',
+        'backend.tasks.task_render_sam',
+        'backend.tasks.task_report',
     ],
 )
 

@@ -4,14 +4,14 @@ Cria um app FastAPI mínimo com a rota registrada para evitar
 dependências de módulos ausentes (database, core.models).
 """
 
-from unittest.mock import MagicMock, patch
+import uuid
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, HttpUrl
-
-import uuid
 
 from backend.tasks.task_download_gdb import task_download_gdb
 
@@ -24,11 +24,14 @@ class _DownloadRequest(BaseModel):
 
 @_test_app.post('/download-gdb')
 def download_gdb(request: _DownloadRequest):
-
     job_id = str(uuid.uuid4())
     try:
         task = task_download_gdb.delay(job_id, str(request.url))
-        return {'job_id': job_id, 'task_id': task.id, 'status': 'queued'}
+        return {
+            'job_id': job_id,
+            'task_id': task.id,
+            'status': 'queued',
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -39,12 +42,16 @@ def client():
 
 
 def test_retorna_job_id_e_task_id(client):
-    mock_result = MagicMock()
-    mock_result.id = 'celery-task-id-123'
-
-    with patch(
-        'backend.tasks.task_download_gdb.task_download_gdb.delay',
-        return_value=mock_result,
+    fake_task = SimpleNamespace(id='celery-task-id-123')
+    with (
+        patch(
+            'backend.tests.test_route_etl.uuid.uuid4',
+            return_value='job-123',
+        ),
+        patch(
+            'backend.tests.test_route_etl.task_download_gdb.delay',
+            return_value=fake_task,
+        ) as delay_mock,
     ):
         response = client.post(
             '/download-gdb',
@@ -52,8 +59,9 @@ def test_retorna_job_id_e_task_id(client):
         )
 
     assert response.status_code == 200
+    delay_mock.assert_called_once_with('job-123', 'https://example.com/file.zip')
     body = response.json()
-    assert 'job_id' in body
+    assert body['job_id'] == 'job-123'
     assert body['task_id'] == 'celery-task-id-123'
     assert body['status'] == 'queued'
 
@@ -72,9 +80,15 @@ def test_payload_vazio_retorna_422(client):
 
 
 def test_erro_no_celery_retorna_500(client):
-    with patch(
-        'backend.tasks.task_download_gdb.task_download_gdb.delay',
-        side_effect=Exception('broker down'),
+    with (
+        patch(
+            'backend.tests.test_route_etl.uuid.uuid4',
+            return_value='job-500',
+        ),
+        patch(
+            'backend.tests.test_route_etl.task_download_gdb.delay',
+            side_effect=Exception('broker down'),
+        ),
     ):
         response = client.post(
             '/download-gdb',
