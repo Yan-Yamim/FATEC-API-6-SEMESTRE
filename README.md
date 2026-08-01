@@ -41,6 +41,16 @@ Dimension the power distribution system to enable the expansion of Tecsys teleme
 
 The solution consists of developing a platform capable of processing ANEEL’s massive and unstructured data and standardizing the loss calculation. The system translates this data into strategic visualizations, such as heatmaps and rankings, which geographically highlight the most critical sections of the power grid.
 
+## Contribuições pessoais
+- Estruturação de arquitetura e template base
+- Configuração do Docker (Dockerfile e docker-compose.yml)
+- CRUD de usuário
+- Sistema de autenticação de usuário
+- Cálculo do TAM (Soma de toda a extensão dos fios elétricos)
+- Gráfico do TAM
+- Correção dos links do DEC e FEC para os settings
+- Script de setup para download DEC e FEC e sincronização de distribuidoras
+- Mudança do layout do relatório final 
 
 ---
 
